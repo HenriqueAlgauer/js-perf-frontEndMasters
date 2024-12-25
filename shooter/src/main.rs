@@ -38,7 +38,7 @@ struct Config {
     #[clap(short, long, default_value_t = 42069)]
     port: usize,
 
-    #[clap(long, default_value = "0.0.0.0")]
+    #[clap(long, default_value = "127.0.0.1")]
     host: String,
 
     #[clap(short, long, default_value_t = 10000)]
