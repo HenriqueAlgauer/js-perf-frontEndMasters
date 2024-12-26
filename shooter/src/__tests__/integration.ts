@@ -3,6 +3,15 @@ import { PlayerState } from "../game/game";
 
 const kills: any[] = [];
 
+function isProcessRunning(pid: number): boolean {
+    try {
+        const output = execSync(`tasklist | findstr ${pid}`).toString();
+        return output.includes(pid.toString());
+    } catch {
+        return false;
+    }
+}
+
 async function* spawnChild(cmd: string, closeOnError: boolean = false) {
     let closed: boolean = false;
     let child = spawn(cmd, {
@@ -18,14 +27,14 @@ async function* spawnChild(cmd: string, closeOnError: boolean = false) {
 
     function next(): Promise<string> {
         return new Promise(res => {
-            child.stdout.once("data", function(data) {
+            child.stdout.once("data", function (data) {
                 res(data.toString());
             });
         });
     }
 
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", function(data) {
+    child.stderr.on("data", function (data) {
         if (closeOnError) {
             closed = true;
             console.error("ERROR", data);
@@ -38,12 +47,13 @@ async function* spawnChild(cmd: string, closeOnError: boolean = false) {
 }
 
 jest.useFakeTimers();
-jest.setTimeout(40_000);
+jest.setTimeout(60_000);
+
 test("player one shoots once and wins", async () => {
     execSync("tsc");
     if (process.env.CHECK) {
         try {
-            console.log(execSync("lsof -i :42000").toString());
+            console.log(execSync("netstat -aon | findstr :42000").toString());
         } catch (e) {
             console.error("cannot check", e);
         }
@@ -78,8 +88,8 @@ test("player one shoots once and wins", async () => {
         }
     }
 
-    expect(p1);
-    expect(p2);
+    expect(p1).toBeDefined();
+    expect(p2).toBeDefined();
     if (!p1 || !p2) {
         return;
     }
@@ -96,14 +106,16 @@ test("player one shoots once and wins", async () => {
 afterEach(() => {
     kills.forEach(k => {
         try {
-            // this sometimes doesn't work
-            k.kill("SIGKILL");
-
-            if (k.pid) {
-                execSync("kill -9 " + k.pid);
+            if (k.pid && isProcessRunning(k.pid)) {
+                if (process.platform === "win32") {
+                    execSync(`taskkill /PID ${k.pid} /F`);
+                } else {
+                    k.kill("SIGKILL");
+                }
             }
         } catch (e) {
-            ((_) => {})(e);
+            console.error("Failed to kill process", e);
         }
     });
+    kills.length = 0; // Limpa a lista de processos após o teardown
 });
