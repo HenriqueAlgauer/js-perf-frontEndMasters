@@ -30,17 +30,6 @@ export function onMessage(ws: WS, msg: string) {
     }
 }
 
-// async function waitForOpen(socket: WebSocket): Promise<void> {
-//     return new Promise(function waitForOpen(resolve, reject) {
-//         if (socket.readyState !== WebSocket.OPEN) {
-//             socket.once("open", resolve);
-//             socket.once("error", reject);
-//         } else {
-//             resolve();
-//         }
-//     });
-// }
-
 type State = {
     messages: Message[],
     error: boolean,
@@ -119,8 +108,9 @@ async function playGame(p1: WS, p2: WS) {
             }
         }
 
-        s1.messages = [];
-        s2.messages = [];
+        s1.messages.length = 0
+        s2.messages.length = 0
+
 
         if (game.ended || s1.close || s2.close || s1.error || s2.error) {
             finish()
@@ -176,6 +166,7 @@ async function playGame(p1: WS, p2: WS) {
         getWriter().count("games-played");
         wsToState.delete(p1)
         wsToState.delete(p2)
+        game.reclaim()
     }
 }
 

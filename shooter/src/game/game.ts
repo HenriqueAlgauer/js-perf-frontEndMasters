@@ -1,13 +1,32 @@
 import { Logger } from "pino";
 import { getConsts } from "./consts";
 import { getLogger } from "../logger";
+import { Pool } from "./pool";
 const consts = getConsts();
 
-type Bullet = {
-    x: number;
-    direction: 1 | -1;
+let id = 0
+class Bullet {
+    x: number = 0;
+    direction: 1 | -1 = -1;
     id: number;
+
+    constructor() {
+        this.id = ++id
+    }
+
+    reset(x: number, direction: 1 | -1) {
+        this.x = x;
+        this.direction = direction;
+
+        return this
+    }
 }
+
+function createBullet() {
+    return new Bullet()
+}
+
+const bulletPool = new Pool<Bullet>(createBullet)
 
 export type PlayerState = {
     id: number;
@@ -19,7 +38,6 @@ export type PlayerState = {
     direction: 1 | -1;
 }
 
-let id = 0;
 function createState(x: number, direction: 1 | -1) {
     return {
         lastFire: -1,
@@ -47,8 +65,8 @@ export class Game {
 
     private s1: PlayerState;
     private s2: PlayerState;
-
-    public bullets: Bullet[];
+    public b1: Bullet[];
+    public b2: Bullet[];
 
     private logger: Logger;
     public loopCount: number = 0;
@@ -59,7 +77,8 @@ export class Game {
         this.s1 = createState(-distance, 1);
         this.s2 = createState(distance, -1);
         this.logger = getLogger().child({ p1: this.s1, p2: this.s2, id: id++ });
-        this.bullets = []
+        this.b1 = []
+        this.b2 = []
     }
 
     log() {
@@ -69,6 +88,15 @@ s1: ${JSON.stringify(this.s1)}
 s2: ${JSON.stringify(this.s2)}`);
     }
 
+    reclaim() {
+        for (const b of this.b1) {
+            bulletPool.set(b)
+        }
+        for (const b of this.b2) {
+            bulletPool.set(b)
+        }
+    }
+
     update(delta: number) {
         this.s1.ticks += delta;
         this.s2.ticks += delta;
@@ -76,68 +104,73 @@ s2: ${JSON.stringify(this.s2)}`);
         this.loopCount++;
         this.currentTime += delta;
 
-        for (let i = 0; i < this.bullets.length; i++) {
-            const b = this.bullets[i]
+        for (const b of this.b1) {
             updateBullet(b, delta)
-            if (b.x < this.s1.x + consts.PLAYER_RADIUS) {
-                this.logger.info({ s1: this.s1, s2: this.s2, loopCount: this.loopCount }, "player one lost");
-                this.s2.won = true;
-                this.s1.won = false;
-                this.ended = true;
-                return;
-            }
+        }
 
+        for (const b of this.b2) {
+            updateBullet(b, delta)
+        }
+
+        const b = this.b1[0]
+        const b2 = this.b2[0]
+
+        if (b && b2) {
+            if (collide(b, b2)) {
+                // this.logger.info({
+                //     b,
+                //     other: b2,
+                // }, "bullets collided");
+                bulletPool.set(this.b1.shift()!)
+                bulletPool.set(this.b2.shift()!)
+            }
+        } else if (b) {
             if (b.x > this.s2.x - consts.PLAYER_RADIUS) {
-                this.logger.info({ s1: this.s1, s2: this.s2, loopCount: this.loopCount }, "player two lost");
+                // this.logger.info({ s1: this.s1, s2: this.s2, loopCount: this.loopCount }, "player two lost");
                 this.s2.won = false;
                 this.s1.won = true;
                 this.ended = true;
-                return;
             }
-
-            for (let j = i + 1; j < this.bullets.length; j++) {
-                const b2 = this.bullets[j]
-                if (collide(b, b2)) {
-                    this.logger.info({
-                        b,
-                        other: b2,
-                    }, "bullets collided");
-                    this.bullets.splice(j, 1)
-                    this.bullets.splice(i--, 1)
-                    break;
-                }
+        } else if (b2) {
+            if (b2.x < this.s1.x + consts.PLAYER_RADIUS) {
+                // this.logger.info({ s1: this.s1, s2: this.s2, loopCount: this.loopCount }, "player one lost");
+                this.s2.won = true;
+                this.s1.won = false;
+                this.ended = true;
             }
         }
     }
 
     fire(player: number) {
         const state = this.getState(player);
+        const bullets = this.getBullets(player);
         const now = this.currentTime;
         if (state.lastFire + this.fireRateMS > now && state.lastFire !== -1) {
-            this.logger.info("early fire, nothing happened", state);
+            // this.logger.info("early fire, nothing happened", state);
             return;
         }
 
         state.lastFire = now;
-        this.createBullet(state);
+        this.createBullet(state, bullets);
     }
 
     gameStats(): [PlayerState, PlayerState] {
         return [this.s1, this.s2];
     }
 
-    private createBullet(state: PlayerState) {
-        this.bullets.push({
-            x: state.x + (consts.PLAYER_RADIUS + consts.BULLET_RADIUS) * state.direction,
-            direction: state.direction,
-            id: ++id,
-        });
+    private createBullet(state: PlayerState, bullets: Bullet[]) {
+        bullets.push(bulletPool.get().reset(state.x + (consts.PLAYER_RADIUS + consts.BULLET_RADIUS) * state.direction, state.direction));
         state.bulletsFired++;
 
-        this.logger.info("bullet created", state);
+        // this.logger.info("bullet created", state);
     }
 
     private getState(player: number): PlayerState {
         return player === 1 ? this.s1 : this.s2;
     }
+
+    private getBullets(player: number): Bullet[] {
+        return player === 1 ? this.b1 : this.b2;
+    }
+
 }
