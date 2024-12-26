@@ -14,6 +14,7 @@ Excesso de criação de objetos e funções assíncronas, sem necessidade necess
 
 # Conclusão:
 Este curso é muito bom para visualizar os 'custos' várias funcionalidades do JavaScript, como Promisses, arrays, JSON, dependências, nada 'sai de graça', e alternativas mais 'performáticas' dentro do possível que JS oferece.
+
 [![Frontend Masters](https://static.frontendmasters.com/assets/brand/logos/full.png)][fem]
 
 This is a companion repo for the [Blazingly Fast JavaScript][course] course on [Frontend Masters][fem].
